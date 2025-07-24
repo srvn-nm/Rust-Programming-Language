@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 // PRESENT S-box (4-bit to 4-bit)
 const SBOX: [u8; 16] = [
     0xC, 0x5, 0x6, 0xB, 0x9, 0x0, 0xA, 0xD, 
@@ -13,7 +11,7 @@ const SBOX_INV: [u8; 16] = [
 ];
 
 /// Apply the S-box to each nibble (4-bit chunk) in a 16-bit word
-fn sbox_layer(mut state: u16) -> u16 {
+fn sbox_layer(state: u16) -> u16 {
     let mut output = 0;
     for i in 0..4 {
         let nibble = (state >> (i * 4)) as u8 & 0xF;
@@ -24,7 +22,7 @@ fn sbox_layer(mut state: u16) -> u16 {
 }
 
 /// Apply the inverse S-box to each nibble in a 16-bit word
-fn sbox_inv_layer(mut state: u16) -> u16 {
+fn sbox_inv_layer(state: u16) -> u16 {
     let mut output = 0;
     for i in 0..4 {
         let nibble = (state >> (i * 4)) as u8 & 0xF;
@@ -220,6 +218,44 @@ fn differential_attack(
         .unwrap()
 }
 
+/// Find best linear approximation for S-box
+fn find_best_linear_approximation() -> (u8, u8, f32) {
+    let mut best_bias = -1.0;
+    let mut best_input = 0;
+    let mut best_output = 0;
+    
+    for input_mask in 1..16u8 {
+        for output_mask in 1..16u8 {
+            let bias = linear_bias_sbox(input_mask, output_mask).abs();
+            if bias > best_bias {
+                best_bias = bias;
+                best_input = input_mask;
+                best_output = output_mask;
+            }
+        }
+    }
+    (best_input, best_output, best_bias)
+}
+
+/// Find best differential characteristic for S-box
+fn find_best_differential() -> (u8, u8, f32) {
+    let mut best_prob = -1.0;
+    let mut best_input = 0;
+    let mut best_output = 0;
+    
+    for input_diff in 1..16u8 {
+        for output_diff in 0..16u8 {
+            let prob = diff_prob_sbox(input_diff, output_diff);
+            if prob > best_prob {
+                best_prob = prob;
+                best_input = input_diff;
+                best_output = output_diff;
+            }
+        }
+    }
+    (best_input, best_output, best_prob)
+}
+
 // Main Function for Demonstration
 // ------------------------------
 fn main() {
@@ -238,12 +274,25 @@ fn main() {
     println!("Decrypted:  {:04X}", decrypted);
     assert_eq!(plaintext, decrypted);
     
+    // Analyze S-box properties
+    let (best_in_lin, best_out_lin, best_bias) = find_best_linear_approximation();
+    println!("\nS-box Linear Analysis:");
+    println!("Best linear approximation: input mask {:X}, output mask {:X}, bias: {:.4}", 
+             best_in_lin, best_out_lin, best_bias);
+    
+    let (best_in_diff, best_out_diff, best_prob) = find_best_differential();
+    println!("Best differential characteristic: input diff {:X}, output diff {:X}, probability: {:.4}", 
+             best_in_diff, best_out_diff, best_prob);
+    
     // Linear Attack Demo
     // -----------------
-    // Predefined masks for a linear approximation trail
-    let alpha = 0x0001; // Input mask (plaintext)
-    let beta = 0x0100;  // Output mask (before last S-box)
-    let nibble_idx = 2; // Target nibble index (0-3)
+    // Use best linear approximation for attack
+    let alpha = (best_in_lin as u16) << 4; // Apply to second nibble
+    let beta = (best_out_lin as u16) << 8; // Apply to third nibble
+    let nibble_idx = 2; // Target third nibble (0-3)
+    
+    println!("\nUsing linear approximation with bias {:.4} for attack", best_bias);
+    println!("Alpha mask: {:04X}, Beta mask: {:04X}, Target nibble: {}", alpha, beta, nibble_idx);
     
     // Generate plaintext-ciphertext pairs
     let num_pairs = 10000;
@@ -265,10 +314,14 @@ fn main() {
     
     // Differential Attack Demo
     // -----------------------
-    // Predefined differences
-    let delta_p = 0x0001; // Input difference (plaintexts)
-    let delta_u = 0x0010; // Expected difference before last S-box
-    let nibble_idx = 1;   // Target nibble index
+    // Use best differential characteristic for attack
+    let delta_p = (best_in_diff as u16) << 4; // Apply to second nibble
+    let delta_u = (best_out_diff as u16) << 4; // Apply to second nibble
+    let nibble_idx = 1;   // Target second nibble
+    
+    println!("\nUsing differential with probability {:.4} for attack", best_prob);
+    println!("Input difference: {:04X}, Expected output difference: {:04X}, Target nibble: {}", 
+             delta_p, delta_u, nibble_idx);
     
     // Generate chosen plaintext pairs with fixed difference
     let num_pairs = 5000;
