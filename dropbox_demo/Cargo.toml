@@ -1,0 +1,13 @@
+[package]
+name = "dropbox_demo"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# FIX 1: Add dotenvy to your dependencies
+dotenvy = "0.15"
+
+# FIX 2: Ensure the 'default_client' feature is enabled for the synchronous client
+dropbox-sdk = { version = "0.19", features = ["default_client"] }
+
+tokio = { version = "1", features = ["full"] }
